@@ -61,8 +61,8 @@ export const DashboardProvider: React.FC<PropsWithChildren> = ({children}) => {
 
 
     const [date, setDate] = React.useState<DateRange | undefined>({
-        from: subDays(new Date(), 120),
-        to: new Date(),
+        from: new Date(2023, 2, 28),
+        to: new Date(2023, 8, 28),
     })
 
 

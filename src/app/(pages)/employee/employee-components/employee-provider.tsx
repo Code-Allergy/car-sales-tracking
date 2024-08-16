@@ -48,10 +48,11 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({children}) =>
     const [referencePage, setReferencePage] = useState<ReferencePage[]>()
     const {employee, user, session} = useAuth()
 
-    const [date, setDate] = useState<DateRange | undefined>({
-        from: subDays(new Date(), 120),
-        to: new Date(),
+    const [date, setDate] = React.useState<DateRange | undefined>({
+        from: new Date(2023, 2, 28),
+        to: new Date(2023, 8, 28),
     })
+
 
     useEffect(() => {
         fetch("/api/task", { method: "GET" })
