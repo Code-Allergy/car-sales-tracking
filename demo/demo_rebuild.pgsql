@@ -1,11 +1,22 @@
--- TODO enable RLS --
-BEGIN;
+DECLARE
+    rec RECORD;
+BEGIN
+-- Drop all tables
+FOR rec IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+		EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(rec.tablename) || ' CASCADE';
+END LOOP;
+
+-- drop all auth
+FOR rec IN (SELECT tablename FROM pg_tables WHERE schemaname = 'auth') LOOP
+		EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident('auth') || '.' || quote_ident(rec.tablename) || ' CASCADE';
+END LOOP;
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+PERFORM pg_catalog.set_config('search_path', '', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -26,253 +37,6 @@ CREATE EXTENSION IF NOT EXISTS "pgjwt" WITH SCHEMA "extensions";
 CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
-
-CREATE TYPE "public"."Task Status" AS ENUM (
-    'BACKLOG',
-    'CANCELLED',
-    'IN_PROGRESS',
-    'TODO',
-    'FINISHED'
-);
-
-ALTER TYPE "public"."Task Status" OWNER TO "postgres";
-
-CREATE OR REPLACE FUNCTION "public"."after_sale_insert_trigger"() RETURNS "trigger"
-    LANGUAGE "plpgsql"
-    AS $$
-BEGIN
-    INSERT INTO "MonthlySales" ("TimePeriod", "GrossProfit", "FinAndInsurance", "Holdback", "Total")
-    VALUES (
-        TO_DATE(NEW."SaleTime"::text, 'YYYY-MM'),
-        (NEW."GrossProfit")::numeric,
-        (NEW."FinAndInsurance")::numeric,
-        COALESCE(NEW."Holdback"::numeric, 0),
-        (NEW."Total")::numeric
-    )
-    ON CONFLICT ("TimePeriod") DO UPDATE
-    SET
-        "GrossProfit" = "MonthlySales"."GrossProfit" + EXCLUDED."GrossProfit",
-        "FinAndInsurance" = "MonthlySales"."FinAndInsurance" + EXCLUDED."FinAndInsurance",
-        "Holdback" = "MonthlySales"."Holdback" + EXCLUDED."Holdback",
-        "Total" = "MonthlySales"."Total" + EXCLUDED."Total";
-
-    RETURN NEW;
-END;
-$$;
-
-ALTER FUNCTION "public"."after_sale_insert_trigger"() OWNER TO "postgres";
-
-CREATE OR REPLACE FUNCTION "public"."create_new_sale"("sale" "jsonb") RETURNS "void"
-    LANGUAGE "plpgsql"
-    AS $$DECLARE
-    cust_id INT;
-    fin_id INT;
-    trade_id INT;
-BEGIN
-    -- Insert into customers table, save ID
-    INSERT INTO "Customers" ("Name", "City") VALUES(sale->>'CustomerName', sale->>'CustomerCity')
-    RETURNING id into cust_id;
-
-    -- Insert into trade, if was a trade in.
-    IF sale->>'TradeIn' IS NOT NULL THEN
-      INSERT INTO "TradeIns" ("Trade", "ActualCashValue") VALUES (sale->>'TradeIn', (sale->>'TradeInValue')::numeric)
-      RETURNING id into trade_id;
-    END IF;
-
-    -- Check if "FinancingMethod" exists in the sale data
-    IF sale->>'FinancingMethod' IS NOT NULL THEN
-        -- Try to insert into "Financing" table
-        INSERT INTO "Financing" ("Method") VALUES (sale->>'FinancingMethod')
-        ON CONFLICT("Method") DO UPDATE
-        SET "Method" = EXCLUDED."Method"
-        RETURNING id INTO fin_id;
-    END IF;
-
-    -- Insert into the first table
-    INSERT INTO "Sales" (
-      "StockNumber",
-      "VehicleMake",
-      "ActualCashValue",
-      "GrossProfit",
-      "FinAndInsurance",
-      "NewSale",
-      "Holdback",
-      "LotPack",
-      "DaysInStock",
-      "DealerCost",
-      "ROI",
-      "Total",
-      "EmployeeID",
-      "CustomerID",
-      "FinancingID",
-      "TradeInID"
-    )
-    VALUES (
-      sale->>'StockNumber',
-      sale->>'VehicleMake',
-      (sale->>'ActualCashValue')::numeric,
-      (sale->>'GrossProfit')::numeric,
-      (sale->>'FinAndInsurance')::numeric,
-      NOT (sale->>'UsedSale')::boolean,
-      (sale->>'Holdback')::numeric,
-      (sale->>'LotPack')::numeric,
-      (sale->>'DaysInStock')::numeric,
-      (sale->>'DealerCost')::numeric,
-      (sale->>'ROI')::numeric,
-      (sale->>'Total')::numeric,
-      (sale->>'EmployeeID')::uuid,
-      cust_id,
-      fin_id,
-      trade_id
-      );
-END;$$;
-
-ALTER FUNCTION "public"."create_new_sale"("sale" "jsonb") OWNER TO "postgres";
-
-CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    AS $$
-begin
-  INSERT into public."Employees" (id, "Email", "Name", "EmployeeNumber", "Role")
-  values (
-    new.id,
-    new.email,
-    new.raw_user_meta_data->>'Name',
-    new.raw_user_meta_data->>'EmployeeNumber',
-    (new.raw_user_meta_data->>'Role')::integer
-  );
-  return new;
-end;
-$$;
-
-ALTER FUNCTION "public"."handle_new_user"() OWNER TO "postgres";
-
-CREATE OR REPLACE FUNCTION "public"."handle_sale_deletion"() RETURNS "trigger"
-    LANGUAGE "plpgsql"
-    AS $$
-BEGIN
-  UPDATE "MonthlySales"
-  SET
-      "GrossProfit" = "MonthlySales"."GrossProfit" - COALESCE(OLD."GrossProfit", 0),
-      "FinAndInsurance" = "MonthlySales"."FinAndInsurance" - COALESCE(OLD."FinAndInsurance", 0),
-      "Holdback" = "MonthlySales"."Holdback" - COALESCE(OLD."Holdback", 0),
-      "Total" = "MonthlySales"."Total" - COALESCE(OLD."Total", 0)
-  WHERE
-    EXTRACT(YEAR FROM "TimePeriod") = EXTRACT(YEAR FROM OLD."SaleTime")
-    AND EXTRACT(MONTH FROM "TimePeriod") = EXTRACT(MONTH FROM OLD."SaleTime");
-
-  RETURN OLD;
-END;
-$$;
-
-ALTER FUNCTION "public"."handle_sale_deletion"() OWNER TO "postgres";
-
-CREATE OR REPLACE FUNCTION "public"."handle_update_user"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    AS $$BEGIN
-  UPDATE public."Employees"
-  SET
-    "Email" = new.email,
-    "Name" = new.raw_user_meta_data->>'Name',
-    "EmployeeNumber" = new.raw_user_meta_data->>'EmployeeNumber',
-    "Role" = (new.raw_user_meta_data->>'Role')::integer
-  WHERE
-    "id" = CAST(new.id AS UUID);
-
-  RETURN new;
-END;$$;
-
-ALTER FUNCTION "public"."handle_update_user"() OWNER TO "postgres";
-
-CREATE OR REPLACE FUNCTION "public"."update_new_sale"("sale" "jsonb") RETURNS "void"
-    LANGUAGE "plpgsql"
-    AS $$DECLARE
-  cust_id INT;
-  fin_id INT;
-  trade_id INT;
-  prev_gross_profit numeric;
-  prev_fin_and_insurance numeric;
-  prev_holdback numeric;
-  prev_total numeric;
-BEGIN
-  -- Insert into customers table if not exists, save ID
-  -- LEAKING OLD VALUES ** FIX
-  INSERT INTO "Customers" ("Name", "City")
-  VALUES (sale->>'CustomerName', sale->>'CustomerCity')
-  RETURNING id INTO cust_id;
-
-  -- Insert into trade if it was a trade-in
-  IF sale->>'TradeIn' IS NOT NULL THEN
-      INSERT INTO "TradeIns" ("Trade", "ActualCashValue")
-      VALUES (sale->>'TradeIn', (sale->>'TradeInValue')::numeric)
-      RETURNING id INTO trade_id;
-  END IF;
-
-  -- Check if "FinancingMethod" exists in the sale data
-  IF sale->>'FinancingMethod' IS NOT NULL THEN
-      -- Try to insert into "Financing" table if not exists
-      INSERT INTO "Financing" ("Method")
-      VALUES (sale->>'FinancingMethod')
-      ON CONFLICT("Method") DO NOTHING
-      RETURNING id INTO fin_id;
-  END IF;
-
-  -- Fetch the previous values
-  SELECT
-    "GrossProfit",
-    "FinAndInsurance",
-    "Holdback",
-    "Total"
-  INTO
-    prev_gross_profit,
-    prev_fin_and_insurance,
-    prev_holdback,
-    prev_total
-  FROM
-    "Sales"
-  WHERE
-    id = (sale->>'id')::numeric;
-
-  -- Update the existing row in the "Sales" table
-  UPDATE "Sales"
-  SET
-    "StockNumber" = sale->>'StockNumber',
-    "VehicleMake" = sale->>'VehicleMake',
-    "ActualCashValue" = (sale->>'ActualCashValue')::numeric,
-    "GrossProfit" = (sale->>'GrossProfit')::numeric,
-    "FinAndInsurance" = (sale->>'FinAndInsurance')::numeric,
-    "NewSale" = NOT (sale->>'UsedSale')::boolean,
-    "Holdback" = (sale->>'Holdback')::numeric,
-    "LotPack" = (sale->>'LotPack')::numeric,
-    "DaysInStock" = (sale->>'DaysInStock')::numeric,
-    "DealerCost" = (sale->>'DealerCost')::numeric,
-    "ROI" = (sale->>'ROI')::numeric,
-    "Total" = (sale->>'Total')::numeric,
-    "EmployeeID" = (sale->>'EmployeeID')::uuid,
-    "CustomerID" = cust_id,
-    "FinancingID" = fin_id,
-    "TradeInID" = trade_id
-  WHERE
-    id = (sale->>'id')::numeric;
-
-  -- Update or insert into "MonthlySales"
-  INSERT INTO "MonthlySales" ("TimePeriod", "GrossProfit", "FinAndInsurance", "Holdback", "Total")
-  VALUES (
-    TO_DATE(sale->>'SaleTime', 'YYYY-MM'),
-    COALESCE(prev_gross_profit, 0) + COALESCE((sale->>'GrossProfit')::numeric - prev_gross_profit, 0),
-    COALESCE(prev_fin_and_insurance, 0) + COALESCE((sale->>'FinAndInsurance')::numeric - prev_fin_and_insurance, 0),
-    COALESCE(prev_holdback, 0) + COALESCE((sale->>'Holdback')::numeric - prev_holdback, 0),
-    COALESCE(prev_total, 0) + COALESCE((sale->>'Total')::numeric - prev_total, 0)
-  )
-  ON CONFLICT ("TimePeriod") DO UPDATE
-  SET
-    "GrossProfit" = "MonthlySales"."GrossProfit" + EXCLUDED."GrossProfit" - prev_gross_profit,
-    "FinAndInsurance" = "MonthlySales"."FinAndInsurance" + EXCLUDED."FinAndInsurance" - prev_fin_and_insurance,
-    "Holdback" = "MonthlySales"."Holdback" + EXCLUDED."Holdback" - prev_holdback,
-    "Total" = "MonthlySales"."Total" + EXCLUDED."Total" - prev_total;
-END;$$;
-
-ALTER FUNCTION "public"."update_new_sale"("sale" "jsonb") OWNER TO "postgres";
 
 SET default_tablespace = '';
 
@@ -312,6 +76,7 @@ CREATE TABLE IF NOT EXISTS "auth"."identities" (
     "last_sign_in_at" timestamp with time zone,
     "created_at" timestamp with time zone,
     "updated_at" timestamp with time zone,
+    "provider_id" text NOT NULL,
     "email" "text" GENERATED ALWAYS AS ("lower"(("identity_data" ->> 'email'::"text"))) STORED
 );
 
@@ -355,14 +120,16 @@ CREATE TABLE IF NOT EXISTS "auth"."mfa_factors" (
     "status" "auth"."factor_status" NOT NULL,
     "created_at" timestamp with time zone NOT NULL,
     "updated_at" timestamp with time zone NOT NULL,
-    "secret" "text"
+    "secret" "text",
+    "last_challenged_at" timestamp with time zone,
+    "phone" "text"
 );
 
 ALTER TABLE "auth"."mfa_factors" OWNER TO "supabase_auth_admin";
 
 CREATE TABLE IF NOT EXISTS "auth"."refresh_tokens" (
     "instance_id" "uuid",
-    "id" bigint NOT NULL,
+    "id" bigserial NOT NULL PRIMARY KEY,
     "token" character varying(255),
     "user_id" character varying(255),
     "revoked" boolean,
@@ -432,7 +199,8 @@ CREATE TABLE IF NOT EXISTS "auth"."sessions" (
     "not_after" timestamp with time zone,
     "refreshed_at" timestamp without time zone,
     "user_agent" "text",
-    "ip" "inet"
+    "ip" "inet",
+    "tag" "text"
 );
 
 ALTER TABLE "auth"."sessions" OWNER TO "supabase_auth_admin";
@@ -493,6 +261,7 @@ CREATE TABLE IF NOT EXISTS "auth"."users" (
     "reauthentication_sent_at" timestamp with time zone,
     "is_sso_user" boolean DEFAULT false NOT NULL,
     "deleted_at" timestamp with time zone,
+    "is_anonymous" bool DEFAULT false NOT NULL,
     CONSTRAINT "users_email_change_confirm_status_check" CHECK ((("email_change_confirm_status" >= 0) AND ("email_change_confirm_status" <= 2)))
 );
 
@@ -777,9 +546,6 @@ ALTER TABLE ONLY "public"."Sales"
 
 ALTER TABLE ONLY "public"."Sales"
     ADD CONSTRAINT "Sales_FinancingID_fkey" FOREIGN KEY ("FinancingID") REFERENCES "public"."Financing"("id");
-
-ALTER TABLE ONLY "public"."Employees"
-    ADD CONSTRAINT "employees_id_fkey" FOREIGN KEY ("id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 ALTER TABLE ONLY "public"."Employees"
     ADD CONSTRAINT "employees_role_fkey" FOREIGN KEY ("Role") REFERENCES "public"."Roles"("id") ON UPDATE CASCADE;
@@ -1277,6 +1043,9 @@ GRANT ALL ON SEQUENCE "public"."TradeIns_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."TradeIns_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."TradeIns_id_seq" TO "service_role";
 
+ALTER TABLE ONLY "auth"."mfa_amr_claims"
+    ADD CONSTRAINT "mfa_amr_claims_session_id_authentication_method_pkey" UNIQUE ("session_id", "authentication_method");
+
 ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_auth_admin" IN SCHEMA "auth" GRANT ALL ON SEQUENCES  TO "postgres";
 ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_auth_admin" IN SCHEMA "auth" GRANT ALL ON SEQUENCES  TO "dashboard_user";
 
@@ -1301,25 +1070,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES  TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES  TO "service_role";
 
--- ADD INTEGRATION TEST USERS
-ALTER TABLE "auth"."users" DISABLE TRIGGER on_auth_user_created;
 INSERT INTO "public"."Roles" ("id", "RoleName", "ReadPermission", "WritePermission", "ModifySelfPermission", "ModifyAllPermission", "EmployeePermission", "DatabasePermission") VALUES
 (1, 'Default', false, false, false, false, false, false),
 (2, 'Administrator', true, true, true, true, true, true);
 
-INSERT INTO "auth"."users" ("instance_id", "id", "aud", "role", "email", "encrypted_password", "email_confirmed_at", "invited_at", "confirmation_token", "confirmation_sent_at", "recovery_token", "recovery_sent_at", "email_change_token_new", "email_change", "email_change_sent_at", "last_sign_in_at", "raw_app_meta_data", "raw_user_meta_data", "is_super_admin", "created_at", "updated_at", "phone", "phone_confirmed_at", "phone_change", "phone_change_token", "phone_change_sent_at", "email_change_token_current", "email_change_confirm_status", "banned_until", "reauthentication_token", "reauthentication_sent_at", "is_sso_user", "deleted_at") VALUES
-('00000000-0000-0000-0000-000000000000', '1eb698ad-dd16-469a-9f85-03edb9e5aa5c', 'authenticated', 'authenticated', 'admin@domain.com', '$2a$10$W9OuXL6D/ZdgZkxT/CPBx.kLFJv9h/YVcQX0W/CE3.iWsgp7/XSXq', '2023-11-07 10:00:05.227948+00', NULL, '', NULL, '', NULL, '', '', NULL, '2023-11-17 05:36:27.644279+00', '{"provider": "email", "providers": ["email"]}', '{"Name": "_REGISTER_TEST", "Role": "2", "EmployeeNumber": "Integration Admin"}', NULL, '2023-11-07 10:00:05.221681+00', '2023-11-17 05:36:27.647485+00', NULL, NULL, '', '', NULL, '', 0, NULL, '', NULL, false, NULL),
-('00000000-0000-0000-0000-000000000000', 'd311a865-fffd-4a48-a159-6354ca10ee0c', 'authenticated', 'authenticated', 'tester@domain.com', '$2a$10$7G7dfdtFdmpu3/tpiPFDSuWJ4T3UvsPPfCxDB2KLQXw5oadJkdD.m', '2023-11-07 06:57:38.704634+00', NULL, '', NULL, '', '2023-11-07 07:41:49.751707+00', '', '', NULL, '2023-11-17 05:36:41.143832+00', '{"provider": "email", "providers": ["email"]}', '{"Name": "Integration", "Role": "1", "EmployeeNumber": "00001"}', NULL, '2023-11-07 06:57:38.698202+00', '2023-11-17 05:36:41.14528+00', NULL, NULL, '', '', NULL, '', 0, NULL, '', NULL, false, NULL);
-
-INSERT INTO "auth"."identities" ("id", "user_id", "identity_data", "provider", "last_sign_in_at", "created_at", "updated_at", "provider_id") VALUES
-('d311a865-fffd-4a48-a159-6354ca10ee0c', 'd311a865-fffd-4a48-a159-6354ca10ee0c', '{"sub": "d311a865-fffd-4a48-a159-6354ca10ee0c", "email": "tester@domain.com"}', 'email', '2023-11-07 06:57:38.700184+00', '2023-11-07 06:57:38.70023+00', '2023-11-07 06:57:38.70023+00', 'd311a865-fffd-4a48-a159-6354ca10ee0c'),
-('1eb698ad-dd16-469a-9f85-03edb9e5aa5c', '1eb698ad-dd16-469a-9f85-03edb9e5aa5c', '{"sub": "1eb698ad-dd16-469a-9f85-03edb9e5aa5c", "email": "admin@domain.com"}', 'email', '2023-11-07 10:00:05.224706+00', '2023-11-07 10:00:05.224752+00', '2023-11-07 10:00:05.224752+00', '1eb698ad-dd16-469a-9f85-03edb9e5aa5c');
-
-INSERT INTO "public"."Employees" ("id", "Name", "EmployeeNumber", "Role", "Email", "Avatar") VALUES
-('d311a865-fffd-4a48-a159-6354ca10ee0c', 'Integration', 'User', 1, 'tester@domain.com', '01.png'),
-('1eb698ad-dd16-469a-9f85-03edb9e5aa5c', 'Integration', 'Admin', 2, 'admin@domain.com', '03.png');
-
-ALTER TABLE "auth"."users" ENABLE TRIGGER on_auth_user_created;
-
-RESET ALL;
-COMMIT;
+END;

@@ -1,12 +1,11 @@
--- TODO Add reference pages --
--- TODO add nov/dec sales ==
-BEGIN;
+BEGIN
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+PERFORM pg_catalog.set_config('search_path', '', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -1435,5 +1434,5 @@ INSERT INTO "public"."Tasks" ("id", "Name", "Description", "StartDate", "EndDate
 
 ALTER TABLE "auth"."users" ENABLE TRIGGER on_auth_user_created;
 ALTER TABLE "public"."Sales" ENABLE TRIGGER after_sale_insert;
-RESET ALL;
-COMMIT;
+
+END;
