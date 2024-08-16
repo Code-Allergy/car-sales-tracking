@@ -4,6 +4,7 @@ import Image from "next/image";
 import * as React from "react";
 import ContainerLayout from "@/components/container-layout";
 import dynamic from "next/dynamic";
+import DemoCard from "@/components/demo/DemoCard";
 
 const UserAuthForm = dynamic(() => import("./components/user-auth-form"));
 
@@ -28,7 +29,10 @@ export default function AuthenticationPage() {
             className={"grayscale-[25%]"}
           />
         </div>
-        <UserAuthForm />
+        <div>
+          <DemoCard/>
+          <UserAuthForm />
+        </div>
       </div>
     </ContainerLayout>
   );
