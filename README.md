@@ -1,7 +1,3 @@
-Credentials: 
-Admin: nathanial.beining@icloud.com , password1
-Employee: elissa.tsidilkovsky@hotmail.com, password1
-
 ## Installation
 
 ### Dependencies
@@ -91,90 +87,9 @@ the Next.js server on `localhost:3000`.
 
 Connect to the website in your browser and use a pair of credentials in the next section to gain access
 
-
-### Credentials
-Included in the seed.sql are a collection of users, each with a certain role. These roles can be created by custom
-within our app. 
-
-(within seed.sql)
-
-| Role                   | Email                             | Password    | 
-|------------------------|-----------------------------------|-------------|
-| Administrator          | `nathanial.beining@icloud.com`    | `password1` |
-| Administrator          | `antione.ohlhoff@icloud.com`      | `password1` |
-| Human Resources        | `sunny.mordomo@yahoo.com`         | `password1` |
-| Sales Intern           | `sherman.pani@icloud.com`         | `password1` |
-| Sales Associate        | `isela.beaumont@icloud.com`       | `password1` |
-| Sales Associate        | `elissa.tsidilkovsky@hotmail.com` | `password1` |
-| Sales Associate        | `rolanda.reble@outlook.com`       | `password1` |
-| Senior Sales Associate | `mammie.matheo@outlook.com`       | `password1` |
-Alternatively, if you did not add the seed data, you can connect with the admin integration test account:
-
-| Role          | Email              | Password                                                           | 
-|---------------|--------------------|--------------------------------------------------------------------|
-| Administrator | `admin@domain.com` | `Q5EB5ZbTVP2WXXvdD5hYKEqXpc6DubqPkDNXUktiUNV56bf4xg5ReL4xiPJ8aGCH` |
-
-The default roles included in the `seed.sql` file, along with their permissions are as summarized:
-
-| Role                   | Abilities                                                                                                                     |
-|------------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| Administrator          | Absolute access, can modify anything in the system and manage employees                                                       |
-| Human Resources        | Similar in permissions to Administrator, but no access to creating/modifying sales.                                           |
-| Financier              | Ability to see the system from the admin view, however no access to removing employees or any sales modification permissions. |
-| Sales Intern           | Ability to create sales and view their own sales. Not permitted to modify their own previous sales.                           |
-| Sales Associate        | Ability to create sales and view their own sales. Permitted to modify their own previous sales.                               |
-| Senior Sales Associate | Ability to create and view their own and other's sales. Permitted to modify theirs and other's sales.                         |
-
-### Deploying
-To deploy this project in an actual environment, you would likely host the web app directly through [Vercel](https://vercel.com/).
-
-An alternative approach could be to host the local supabase client and our web app behind a reverse proxy locally within
-the business, if wanting to keep data in house.
-
-The only other change required to supabase once deployed is changing the domain for authentication. This can be found in
-the Authentication section on the sidebar, and under the URL Configuration label. This should be set to the domain of the
-hosted web app, so Supabase knows where to direct users for authentication requests.
-
-### Test Deployments
-The following subdomains are set up to mirror the latest deployment of each user's branch. 
-Some of them are just old versions of main, as some of them have never made a commit:
-
-| Branch   | URL                                                          |
-|----------|--------------------------------------------------------------|
-| main     | [codeallergy.dev](https://codeallergy.dev)                   |
-| dev      | [dev.codeallergy.dev](https://dev.codeallergy.dev)           |
-| Amir     | [amir.codeallergy.dev](https://amir.codeallergy.dev)         |
-| bill     | [bill.codeallergy.dev](https://bill.codeallergy.dev)         |
-| Rudra    | [rudra.codeallergy.dev](https://rudra.codeallergy.dev)       |
-| ryan     | [ryan.codeallergy.dev](https://ryan.codeallergy.dev)         |
-| Suchetan | [suchetan.codeallergy.dev](https://suchetan.codeallergy.dev) |
-| tolu     | [tolu.codeallergy.dev](https://tolu.codeallergy.dev)         |
-
 ## Testing
 To run the test suite for the program, run the following in the terminal:
 ```shell
 npm run test
 ```
 This will run all tests in `/src/tests`, reporting on the status of each test as it runs.
-
-There are also deployments of the Storybook for dev and main branches, along with auto-generated TypeDoc documentation:
-| Site                 | URL                                                                     |
-|----------------------|-------------------------------------------------------------------------|
-| Storybook (main)     | [storybook.codeallergy.dev](https://storybook.codeallergy.dev)          |
-| Storybook (dev)      | [dev.storybook.codeallergy.dev](https://dev.storybook.codeallergy.dev)  |
-| TypeDocs             | [docs.codeallergy.dev](https://docs.codeallergy.dev)                    |
-
-
-## Documentation
-Some links to help you get started:
-
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [Next.js GitHub repository](https://github.com/vercel/next.js/)
-
-
-- [React Documentation](https://react.dev/reference/react)
-- [shadcn/ui Documentation](https://ui.shadcn.com/docs/)
-- [Database Documentation](https://docs.codeallergy.dev/interfaces/DatabaseUsage.html)
-- [Supabase-js Documentation](https://supabase.com/docs/reference/javascript/introduction)
-- [Auto-generated JSDoc Documentation](https://docs.codeallergy.dev)
