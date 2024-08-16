@@ -1,6 +1,5 @@
 import "@testing-library/jest-dom";
 import "whatwg-fetch";
-require("dotenv").config({ path: ".env" });
 global.ResizeObserver = require("resize-observer-polyfill");
 
 // Mock useRouter:
