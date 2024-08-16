@@ -8,6 +8,7 @@ import { ReactNode } from "react";
 
 import dynamic from 'next/dynamic';
 import {Toaster} from "@/components/ui/toaster";
+import DemoBanner from "@/components/demo/DemoBanner";
 /**
  * Root layout that is rendered on all pages.
  * @param children
@@ -20,6 +21,7 @@ export default function RootLayout({children,}: { children: ReactNode }) {
         <AuthContextProvider>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
               <Navigation />
+              <DemoBanner/>
               {children}
               <Toaster />
           </ThemeProvider>
